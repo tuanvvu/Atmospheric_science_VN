@@ -1,0 +1,163 @@
+# Require library -----------------------------------------------
+#####
+library(worldmet) # Lấy dữ liệu thời tiết
+library(lubridate) # Làm việc với ngày
+library(plyr) # Wrap dữ liệu
+library(dplyr) # Wrap dữ liệu
+library(openair) # Xử lý số liệu air pollution
+library(ggplot2) # Plot các figures
+library(rmweather) # Weather normlization
+library(ranger) # Package cho random forest
+library(doSNOW) # Chạy song song
+library(doParallel) # chạy song son
+
+###01. Tạo folder chứa input và output dữ liệu
+setwd("F:/13. Air Pollution 4 Vietnam/Covid_impact_vn/01.Data/")
+workingDirectory<<-("F:/13. Air Pollution 4 Vietnam/Covid_impact_vn/01.Data/")
+# Ghi chú:
+# Giai doan cach ly bat buoc toan xa hoi: 01/04/2020 - 22/04/2020
+# Thoi diem chuẩn bị social distance từ 18/03/2020
+
+###02. Chuẩn bị dữ liệu
+# Lấy dữ liệu PM2.5 từ US Embasssy cho Hanoi
+pm25_hn_2020 <- read.csv("http://dosairnowdata.org/dos/historical/Hanoi/2020/Hanoi_PM2.5_2020_YTD.csv", header = T)
+# Ho Chi Minh city
+pm25_hcm_202- <- read.csv("http://dosairnowdata.org/dos/historical/HoChiMinhCity/2020/HoChiMinhCity_PM2.5_2020_YTD.csv", header = T)
+
+# Lấy dữ liệu thời tiết từ sân bay nội bài Noi Bai data
+nb_met <- importNOAA(code = "488200-99999", year = 2020)
+# Tan Son Nhat data
+tsn_met <- importNOAA(code = "489000-99999", year = 2020)
+# save dữ liệu lên folder 
+write.csv(nb_met,paste(workingDirectory,"nb_met_2016_2020.csv",sep=""))
+write.csv(tsn_met,paste(workingDirectory,"tsn_met_2016_2020.csv",sep=""))
+
+### Merge 2 tập dữ liệu
+# Remove invalid, dùng subset function
+pm25_hn_valid <- subset(pm25_hn_2020, pm25_hn_2020$QC.Name == "Valid" & airnow_hcm$Raw.Conc. > 0)
+# Convert dữ liệu về cùng 1 time zone, nên nhớ số liệu từ nội bài là GMT, cần chuyển về GMT + 7, coi package lubridate
+
+# Sau khi chuyên time zone thì merge 2 dataset
+
+data_hn <- merge(pm25_hn_valid[,c(3,11)],
+                 nb_met[,c(1,9:23)],
+                 by = "date", all= TRUE)
+
+### 03.  Xử lý số liệu
+
+# Coi tổng qua số liệu
+summaryPlot(subset(data_hn[,c(1,2:4)]))
+
+# Plot time series dữ liệu
+timePlot(selectByDate(data_hn, month= 4, year=2016:2020), pollutant="pm25.hn", 
+         avg.time = "day", group=TRUE)
+
+# Plot dữ liệu theo hướng gió 
+polarPlot(selectByDate(pdata_hn, start="01/03/2020", end = "17/03/2020"),
+                       pollutant = "pm25.hn", cols="jet")
+
+# Plot sự phụ thuộc PM2.5 vào wind speed
+timeProp(selectByDate(data_hn, month=2:5, year=2020), pollutant = "pm25.hcm", avg.time = "1 day",
+         proportion = "ws", date.breaks = 10, key.position = "top",
+         key.columns = 4, ylab = "PM2.5 (ug/m3)")
+
+# Plot biến thiên theo ngày giừo
+a<-timeVariation(selectByDate(data_hn, month=3:4,year=2020), 
+                 pollutant="pm25.hn", type="year", ylab = "PM2.5 (ug/m3)")
+
+
+### 04.Merge with back-trajectories
+# Dùng openair download back-trajectories, sau đó phân chia thành các cluster
+traj_hn <- importTraj(site ="Hanoi", year = 2020, local = "E:/NOAA/TrajProc/")
+traj_hn_sp<-selectByDate(traj_hn, month= 3:5, year=2020)
+cluster_hn <- trajCluster(traj_hn_sp, n.cluster= 4, col = c("blue","green","red","purple"),lwd =2,
+                          orientation=c(110,20,90),grid.col = "transparent")
+cluster_hn_data <- cluster_hn$data
+
+# merge with cluster với dư liệu PM2.5
+data_hn_2020<-merge(data_hn_2020,cluster_hn_data, by="date") # check time zone trước khi merge
+
+# Plot sự phụ thuộc của PM2.5 vào cluster
+
+timeProp(data_hn, pollutant = "pm25.hn", avg.time = "6 hour",
+         proportion = "cluster", date.breaks = 10, key.position = "top",
+         key.columns = 4, ylab = "PM2.5 (ug/m3)")
+
+trellis.last.object() +
+  latticeExtra::layer(lpolygon(x = c(as.POSIXct("2020-03-21"),
+                                     as.POSIXct("2020-03-21"), as.POSIXct("2020-04-01"),
+                                     as.POSIXct("2020-04-01")), y = c(-25, 285, 285, -25),
+                               col = "plum1", border = NA), under = TRUE)
+trellis.last.object() +
+  latticeExtra::layer(lpolygon(x = c(as.POSIXct("2020-04-01"),
+                                     as.POSIXct("2020-04-01"), as.POSIXct("2020-04-23"),
+                                     as.POSIXct("2020-04-23")), y = c(-25, 285, 285, -25),
+                               col = "lightpink2", border = NA), under = TRUE)
+
+
+### 05. Remove dư liệu thời tiết
+
+# Thêm time variables # có thể dung mutate trong dplyr cho nhanh
+data_hn$date_unix <- as.numeric(data_hn$date)
+data_hn$day_julian <- as.numeric(format(data_hn$date, "%j"))
+data_hn$weekday <- as.numeric(format(data_hn$date, "%u"))
+data_hn$month <- as.numeric(format(data_hn$date, "%m"))
+data_hn$year <- as.numeric(format(data_hn$date, "%y"))
+
+# Prepare data for modelling
+# Chia tập dư liệu thanh 2 phần: 80% dành cho training và 20% dành cho testing
+data_train<- data_hn %>% mutate(set=NA)
+data_hn_training<- sample_frac(0.8, replace = FALSE) %>%
+                   mutate (set="training")
+data_prepare <- data_hn %>% mutate (set="testing") %>%
+                   anti_join(data_hn_training, by = "date") %>%
+                  bind_rows(data_hn_training)
+                  
+# remove các NA varibale 
+data_prepared_hn <- data_hn %>%
+  dplyr::rename(value = pm25.hn) %>%
+  filter(!is.na(value)) %>%
+  filter(!is.na(air_temp)) %>%
+  filter(!is.na(RH)) %>%
+  filter(!is.na(ws)) %>%
+  filter(!is.na(wd)) 
+
+# Grow/train a random forest model and then create a meteorological normalised trend
+set.seed(1)
+list_normalised_hn <- rmw_do_all(data_prepared_hn,
+                                 variables = c( "day_julian", "weekday", "air_temp", "RH", "wd", "ws", "cluster"),
+                                 n_trees = 300,
+                                 n_samples = 300,
+                                 verbose = TRUE)
+
+# Check model object's performance
+rmw_model_statistics(list_normalised_hn$model)
+model_statistics_normalised_hn <- rmw_model_statistics(list_normalised_hn$model)
+
+# Plot variable importances
+list_normalised_hn$model %>%
+  rmw_model_importance() %>%
+  rmw_plot_importance()
+
+# Check if model has suffered from overfitting
+rmw_predict_the_test_set(model = list_normalised_hn$model,
+                         df = list_normalised_hn$observations) %>%
+                          rmw_plot_test_prediction()
+
+# Plot partial dependencies
+data_pd_hn %>%
+  filter(variable != "date_unix") %>%
+  rmw_plot_partial_dependencies()
+
+plot_partial_dependencies_hn <- data_pd_hn %>%
+  filter(variable != "date_unix") %>%
+  rmw_plot_partial_dependencies()
+
+
+
+
+                          
+ 
+                
+           
+
