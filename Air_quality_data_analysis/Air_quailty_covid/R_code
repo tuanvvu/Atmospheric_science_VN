@@ -1,5 +1,4 @@
-# Require library -----------------------------------------------
-#####
+# Instal và load các R_package sau:
 library(worldmet) # Lấy dữ liệu thời tiết
 library(lubridate) # Làm việc với ngày
 library(plyr) # Wrap dữ liệu
@@ -9,20 +8,16 @@ library(ggplot2) # Plot các figures
 library(rmweather) # Weather normlization
 library(ranger) # Package cho random forest
 library(doSNOW) # Chạy song song
-library(doParallel) # chạy song son
+library(doParallel) # chạy song song
 
 ###01. Tạo folder chứa input và output dữ liệu
 setwd("F:/13. Air Pollution 4 Vietnam/Covid_impact_vn/01.Data/")
 workingDirectory<<-("F:/13. Air Pollution 4 Vietnam/Covid_impact_vn/01.Data/")
-# Ghi chú:
-# Giai doan cach ly bat buoc toan xa hoi: 01/04/2020 - 22/04/2020
-# Thoi diem chuẩn bị social distance từ 18/03/2020
 
 ###02. Chuẩn bị dữ liệu
 # Lấy dữ liệu PM2.5 từ US Embasssy cho Hanoi
 pm25_hn_2020 <- read.csv("http://dosairnowdata.org/dos/historical/Hanoi/2020/Hanoi_PM2.5_2020_YTD.csv", header = T)
-# Ho Chi Minh city
-pm25_hcm_202- <- read.csv("http://dosairnowdata.org/dos/historical/HoChiMinhCity/2020/HoChiMinhCity_PM2.5_2020_YTD.csv", header = T)
+# Ho Chi Minh city: pm25_hcm_2020- <- read.csv("http://dosairnowdata.org/dos/historical/HoChiMinhCity/2020/HoChiMinhCity_PM2.5_2020_YTD.csv", header = T)
 
 # Lấy dữ liệu thời tiết từ sân bay nội bài Noi Bai data
 nb_met <- importNOAA(code = "488200-99999", year = 2020)
@@ -93,7 +88,7 @@ trellis.last.object() +
                                      as.POSIXct("2020-04-01"), as.POSIXct("2020-04-23"),
                                      as.POSIXct("2020-04-23")), y = c(-25, 285, 285, -25),
                                col = "lightpink2", border = NA), under = TRUE)
-
+# Ghi chú:Giai doan cach ly bat buoc toan xa hoi: 01/04/2020 - 22/04/2020; Thoi diem chuẩn bị social distance từ 18/03/2020
 
 ### 05. Remove dư liệu thời tiết
 
