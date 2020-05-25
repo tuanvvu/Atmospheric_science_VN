@@ -21,11 +21,9 @@ pm25_hn_2020 <- read.csv("http://dosairnowdata.org/dos/historical/Hanoi/2020/Han
 
 # Lấy dữ liệu thời tiết từ sân bay nội bài Noi Bai data
 nb_met <- importNOAA(code = "488200-99999", year = 2020)
-# Tan Son Nhat data
-tsn_met <- importNOAA(code = "489000-99999", year = 2020)
+# Tan Son Nhat data: tsn_met <- importNOAA(code = "489000-99999", year = 2020)
 # save dữ liệu lên folder 
 write.csv(nb_met,paste(workingDirectory,"nb_met_2016_2020.csv",sep=""))
-write.csv(tsn_met,paste(workingDirectory,"tsn_met_2016_2020.csv",sep=""))
 
 ### Merge 2 tập dữ liệu
 # Remove invalid, dùng subset function
@@ -34,9 +32,7 @@ pm25_hn_valid <- subset(pm25_hn_2020, pm25_hn_2020$QC.Name == "Valid" & airnow_h
 
 # Sau khi chuyên time zone thì merge 2 dataset
 
-data_hn <- merge(pm25_hn_valid[,c(3,11)],
-                 nb_met[,c(1,9:23)],
-                 by = "date", all= TRUE)
+data_hn <- merge(pm25_hn_valid, nb_met, by = "date", all= TRUE)
 
 ### 03.  Xử lý số liệu
 
