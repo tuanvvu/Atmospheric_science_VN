@@ -60,6 +60,7 @@ a<-timeVariation(selectByDate(data_hn, month=3:4,year=2020),
 ### 04.Merge with back-trajectories
 # Dùng openair download back-trajectories, sau đó phân chia thành các cluster
 traj_hn <- importTraj(site ="Hanoi", year = 2020, local = "E:/NOAA/TrajProc/")
+# Or see the data from: https://github.com/tuanvvu/Atmospheric_science_VN/tree/master/Air_quality_data_analysis/data
 traj_hn_sp<-selectByDate(traj_hn, month= 3:5, year=2020)
 cluster_hn <- trajCluster(traj_hn_sp, n.cluster= 4, col = c("blue","green","red","purple"),lwd =2,
                           orientation=c(110,20,90),grid.col = "transparent")
