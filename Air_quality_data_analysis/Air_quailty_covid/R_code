@@ -144,8 +144,44 @@ plot_partial_dependencies_hn <- data_pd_hn %>%
   filter(variable != "date_unix") %>%
   rmw_plot_partial_dependencies()
 
+# Weather Normalisation
 
+data_MET<-data_hn
+re_sample_MET<-data_hn
+pred<- data_hn %>% select(1)
+new_met<- data_hn %>%  slice(0)
 
+#Function to generated the new- weather from original weather
+new_met<-function (i) {
+  hour_1<-data_MET[i,22] ### "hour" variable is in the 5th column in the data set  
+  MET_sample<-data_MET %>% filter(hour==hour_1) %>% sample_n (1)
+  new_met<-MET_sample
+  return (new_met)}
+
+#Function to predict the concentration of a pollutant using a re-sampled weather        
+set.seed(12345)
+prediction <- function (n) {
+  for (i in 1:n) {
+    re_MET <- plyr::ldply(1:nrow(data_MET), new_met) # Using parallel
+    re_sample_MET[,12:20]<-re_MET[,12:20] ### Replaced old MET by generated MET
+    prediction_value<- rmw_predict( ### RUN Random Forest model with new MET dataset
+      rf_hn_pm2.5$model, 
+      df= rmw_prepare_data(re_sample_MET, value = "pm2.5"))
+    pred<-cbind(pred,prediction_value)}
+  pred}
+
+final_weather_normalised <- prediction (200)
+final_weather_normalised$final <- apply(final_weather_normalised[,2:201],1,mean, na.rm=TRUE)
+
+data_hn<-merge(data_hn,final_weather_normalised, by="date" )
+
+data_hn <- data_ld %>% dplyr:: rename(Modeled.PM2.5=final) %>%
+                       dplyr:: rename(Observed.PM2.5=pm25.hn)
+
+timePlot(data_hn,pollutant=c("Observed.PM2.5", "Modeled.PM2.5"), ##700:500##
+         lwd=c(1,2), group=TRUE, lty=c(1,1),avg.time ="hour",
+         key.position="top",cols=c("darkgreen","firebrick4"),
+         ylab=expression("PM2.5 concentration"* " (" * mu * "g m" ^-3 * ")"))
 
                           
  
