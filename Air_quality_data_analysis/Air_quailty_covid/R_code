@@ -27,7 +27,7 @@ write.csv(nb_met,paste(workingDirectory,"nb_met_2016_2020.csv",sep=""))
 
 ### Merge 2 tập dữ liệu
 # Remove invalid, dùng subset function
-pm25_hn_valid <- subset(pm25_hn_2020, pm25_hn_2020$QC.Name == "Valid" & airnow_hcm$Raw.Conc. > 0)
+pm25_hn_valid <- subset(pm25_hn_2020, pm25_hn_2020$QC.Name == "Valid" & airnow_hn$Raw.Conc. > 0)
 # Convert dữ liệu về cùng 1 time zone, nên nhớ số liệu từ nội bài là GMT, cần chuyển về GMT + 7, coi package lubridate
 
 # Sau khi chuyên time zone thì merge 2 dataset
