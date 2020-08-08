@@ -1,0 +1,65 @@
+library(ncdf4) # package for netcdf manipulation
+library(raster) # package for raster manipulation
+library(rgdal) # package for geospatial analysis
+library(ggplot2) # package for plotting
+library(sf) #to
+library(lwgeom)
+library(lubridate)
+library(latticeExtra)
+library(ggplot2)
+library(dplyr)
+library(plyr)
+library(tidyr)
+library(tidyverse)
+
+#01. Download dữ liệu từ trực tiếp từ:
+https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview
+hoặc sử dụng API:
+https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/
+or từ Package ‘ecmwfr’
+https://cran.r-project.org/web/packages/ecmwfr/ecmwfr.pdf
+
+#02. Xử lý dữ liệu cho netCDF file
+
+#2.1 Open the netCDF file
+# set path and filename
+
+nc <- nc_open("C:/EGU_2020/BLH_hn_1.nc")
+
+#extract lon and lat
+lat <- ncvar_get(nc,'latitude')
+lon <- ncvar_get(nc,'longitude')
+dim(lat);dim(lon)
+
+#create all the combinations of lon-lat
+lonlat <- expand.grid(lon=lon,lat=lat)
+
+#we must convert the coordinates in a spatial object sf
+#we also indicate the coordinate system in EPSG code
+coord <- st_as_sf(lonlat,coords=c("lon","lat"))%>%
+  st_set_crs(4326)
+
+#we do the same with our coordinate of Madrid
+psj <- st_point(c(105.8,20.95))%>%
+  st_sfc()%>%
+  st_set_crs(4326)
+
+#plot all points
+plot(st_geometry(coord))
+plot(psj,add=TRUE,pch = 3, col = 'red')
+
+#add the distance to the points
+coord <- mutate(coord,dist=st_distance(coord,psj))
+#create a distance matrix with the same dimensions as our data
+dist_mat <- matrix(coord$dist,dim(data)[-3])
+#the arrayInd function is useful to obtain the row and column indexes
+mat_index <- as.vector(arrayInd(which.min(dist_mat), dim(dist_mat)))
+
+#we extract the time serie and change the unit from K to ºC
+#we convert the time in date + hour
+
+df <- data.frame(time=timestamp, ta1=data[mat_index[1],], ta2=data[mat_index[2],]) %>%
+      mutate(date=ymd_hms(time))
+
+timePlot(selectByDate(df, year=2019),pollutant=c("ta1"))
+
