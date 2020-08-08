@@ -1,0 +1,202 @@
+#Thực hành back-trajactories từ openair package cho Hà Nội
+# Tuan Vu, email: vvt0403@gmail.com
+
+# Instal và load các R_package sau:
+library(lubridate) # Làm việc với ngày
+library(plyr) # Wrap dữ liệu
+library(dplyr) # Wrap dữ liệu
+library(openair) # Xử lý số liệu air pollution
+library(worldmet) # Lấy dữ liệu thời tiết
+library(ggplot2) # Plot các figures
+
+###01. Tạo folder chứa input và output dữ liệu
+setwd("F:/13. Air Pollution 4 Vietnam/Covid_impact_vn/01.Data/")
+workingDirectory<<-("F:/13. Air Pollution 4 Vietnam/Covid_impact_vn/01.Data/")
+
+###02. Lấy dự liệu từ Hysplit từ NOAA
+setwd("E:/NOAA/")  ### Set the working directory
+workingDirectory<<-"E:/NOAA/"  ### Shortcut for the working directory
+###021. Function to get the the TRAJDATA record from NOAA
+getMet <- function (year = 2019, month = 2:4, path_met = "E:/NOAA/TrajData/") {
+  for (i in seq_along(year)) {
+    for (j in seq_along(month)) {
+      download.file(url = paste0("ftp://arlftp.arlhq.noaa.gov/archives/reanalysis/RP",
+                                 year[i], sprintf("%02d", month[j]), ".gbl"),
+                    destfile = paste0(path_met, "RP", year[i],
+                                      sprintf("%02d", month[j]), ".gbl"), mode = "wb")}}}
+getMet(year = 2020, month = 4:5) ### GET data for sepecific time
+
+###022.PRODUCE TRAJ
+# READ TRAJ from HYsplit model
+hy.path<-"c:/hysplit4/"         ### Install the Hysplit model into the computer
+read.files <- function(hours = 96, hy.path) {
+  ## find tdump files
+  files <- Sys.glob("tdump*")
+  output <- file('Rcombined.txt', 'w')
+  ## read through them all, ignoring 1st 7 lines
+  for (i in files){
+    input <- readLines(i)
+    input <- input[-c(1:7)] # delete header
+    writeLines(input, output)
+  }
+  close(output)
+  ## read the combined txt file
+  traj <- read.table(paste0(hy.path, "working/Rcombined.txt"), header = FALSE)
+  traj <- subset(traj, select = -c(V2, V7, V8))
+  traj <- rename(traj, c(V1 = "receptor", V3 = "year", V4 = "month", V5 = "day",
+                         V6 = "hour", V9 = "hour.inc", V10 = "lat", V11 = "lon",
+                         V12 = "height", V13 = "pressure"))
+  ## hysplit uses 2-digit years ...
+  year <- traj$year[1]
+  if (year < 50) traj$year <- traj$year + 2000 else traj$year <- traj$year + 1900
+  traj$date2 <- with(traj, ISOdatetime(year, month, day, hour, min = 0, sec = 0,
+                                       tz = "GMT"))
+  ## arrival time
+  traj$date <- traj$date2 - 3600 * traj$hour.inc
+  traj
+}
+
+# ADD MET 
+add.met <- function(month, Year, met, bat.file) {
+  ## if month is one, need previous year and month = 12
+  if (month == 0) {
+    month <- 12
+    Year <- as.numeric(Year) - 1
+  }
+  if (month < 10) month <- paste("0", month, sep = "")
+  ## add first line
+  write.table(paste("echo", met, " >>CONTROL"),
+              bat.file, col.names = FALSE,
+              row.names = FALSE, quote = FALSE, append = TRUE)
+  x <- paste("echo RP", Year, month, ".gbl >>CONTROL", sep = "")
+  write.table(x, bat.file, col.names = FALSE,
+              row.names = FALSE, quote = FALSE, append = TRUE)
+}
+
+# PRODUCE THE TRAJ
+###lat = 21.551, lon = 105.845: Thai Nguyen
+
+procTraj <- function(lat = 21.03, lon = 105.80, year = 2020, name = "Hanoi_120m",
+                     met = "E:/NOAA/TrajData/", out = "E:/NOAA/TrajProc/",
+                     hours = 96, height = 120, hy.path = "C:/hysplit4/") {
+  ## hours is the back trajectory time e.g. 96 = 4-day back trajectory
+  ## height is start height (m)
+  lapply(c("openair", "plyr", "reshape2"), require, character.only = TRUE)
+  ## function to run 12 months of trajectories
+  ## assumes 96 hour back trajectories, 1 receptor
+  setwd(paste0(hy.path, "working/"))
+  ## remove existing "tdump" files
+  path.files <- paste0(hy.path, "working/")
+  bat.file <- paste0(hy.path, "working/test.bat") ## name of BAT file to add to/run
+  files <- list.files(path = path.files, pattern = "tdump")
+  lapply(files, function(x) file.remove(x))
+  start <- paste(year, "-01-01", sep = "")
+  end <- paste(year, "-12-31 18:00", sep = "")
+  dates <- seq(as.POSIXct(start, "GMT"), as.POSIXct(end, "GMT"), by = "3 hour")
+  for (i in 1:length(dates)) {
+    year <- format(dates[i], "%y")
+    Year <- format(dates[i], "%Y") # long format
+    month <- format(dates[i], "%m")
+    day <- format(dates[i], "%d")
+    hour <- format(dates[i], "%H")
+    x <- paste("echo", year, month, day, hour, " >CONTROL")
+    write.table(x, bat.file, col.names = FALSE,
+                row.names = FALSE, quote = FALSE)
+    x <- "echo 1 >>CONTROL"
+    write.table(x, bat.file, col.names = FALSE,
+                row.names = FALSE, quote = FALSE, append = TRUE)
+    x <- paste("echo", lat, lon, height, " >>CONTROL")
+    write.table(x, bat.file, col.names = FALSE,
+                row.names = FALSE, quote = FALSE, append = TRUE)
+    x <- paste("echo ", "-", hours, " >>CONTROL", sep = "")
+    write.table(x, bat.file, col.names = FALSE,
+                row.names = FALSE, quote = FALSE, append = TRUE)
+    x <- "echo 0 >>CONTROL
+    echo 10000.0 >>CONTROL
+    echo 3 >>CONTROL"
+    write.table(x, bat.file, col.names = FALSE,
+                row.names = FALSE, quote = FALSE, append = TRUE)
+    ## processing always assumes 3 months of met for consistent tdump files
+    months <- as.numeric(unique(format(dates[i], "%m")))
+    months <- c(months, months + 1:2)
+    months <- months - 1 ## to make sure we get the start of the previous year
+    months <- months[months <= 12]
+    if (length(months) == 2) months <- c(min(months) - 1, months)
+    for (i in 1:3)
+      add.met(months[i], year, met, bat.file)
+    x <- "echo ./ >>CONTROL"
+    write.table(x, bat.file, col.names = FALSE,
+                row.names = FALSE, quote = FALSE, append = TRUE)
+    x <- paste("echo tdump", year, month, day, hour, " >>CONTROL", sep = "")
+    write.table(x, bat.file, col.names = FALSE,
+                row.names = FALSE, quote = FALSE, append = TRUE)
+    x <- "C:\\hysplit4\\exec\\hyts_std"
+    write.table(x, bat.file, col.names = FALSE,
+                row.names = FALSE, quote = FALSE, append = TRUE)
+    ## run the file
+    system(paste0(hy.path, 'working/test.bat'))
+  }
+  ## combine files and make data frame
+  traj <- read.files(hours, hy.path)
+  ## write R object to file
+  file.name <- paste(out, name, Year, ".RData", sep = "")
+  save(traj, file = file.name)
+}
+
+for (i in 2018:2020) {          ### Change the date in lat = 21.658, lon = 105.819- thainguyen
+  procTraj(lat = 21.03, lon = 105.80, year = i, 
+           name = "Hanoi_120m_96h", hours = 96, height = 120,
+           met = "E:/NOAA/TrajData/", out = "E:/NOAA/TrajProc/",
+           hy.path = "C:/hysplit4/") }
+
+
+###03.   Chuẩn bị dữ liệu
+###03.1. Dữ liệu từ traj 
+traj_hn <- importTraj(site ="Hanoi_120m", year = 2018, local = "E:/NOAA/TrajProc/")
+traj_hn$date <- as.POSIXct(strptime(traj_hn_2018 $date, format = "%Y-%m-%d %H:%M:%S", tz = "GMT"))
+traj_hn$date <- with_tz(traj_hn_2018$date,tz = "Asia/Ho_Chi_Minh")
+
+# Plot traj
+trajPlot(selectByDate(traj_hn, start = "15/4/2018", end ="21/4/2018"),
+         map.cols = openColours("hue", 10), orientation=c(90,0,110),xlim=c(95,120),ylim=c(5,30),
+         col = "grey30")
+
+# Trajectory gridded frequencies
+trajLevel(traj_hn, statistic = "frequency", type="season",orientation=c(90,0,110),xlim=c(95,120),ylim=c(5,30))
+trajLevel(traj_hn,orientation=c(90,0,110),xlim=c(95,120),ylim=c(5,30), method = "hexbin", col = "jet",xbin = 40)
+
+
+###3.2. Plot với PM2.5
+# Lấy dữ liệu PM2.5 từ US Embasssy cho Hanoi
+data_hn_2018 <- read.csv("http://dosairnowdata.org/dos/historical/Hanoi/2018/Hanoi_PM2.5_2018_YTD.csv", header = T) %>%
+                subset(QC.Name == "Valid" & Raw.Conc. > 0) %>%
+                dplyr::rename (date= Date..LT.,pm2.5=Raw.Conc.) %>%
+                select(date,pm2.5)
+# Format date
+data_hn_2018$date <- as.POSIXct(strptime(data_hn_2018$date,  format = "%Y-%m-%d %I:%M %p",tz = "Asia/Ho_Chi_Minh"))
+
+#Merge two data sets 
+traj_hn <- left_join(traj_hn, data_hn_2018, by = "date")
+trajPlot(selectByDate(traj_hn, start = "15/4/2018", end = "21/4/2018"),orientation=c(90,0,110),xlim=c(95,120),ylim=c(5,30),
+         pollutant = "pm2.5", col = "jet", lwd = 2)
+
+
+# Trajectory source contribution functions
+trajLevel(traj_hn, pollutant = "pm2.5", statistic = "difference",
+          col = c("skyblue", "white", "tomato"), min.bin = 50, border = NA,
+          orientation=c(90,0,110),xlim=c(95,120),ylim=c(5,30))
+
+# Potential Source Contribution Function (PSCF)    
+trajLevel(traj_hn, pollutant = "pm2.5", statistic = "pscf", col = "increment",
+          orientation=c(90,0,110),xlim=c(95,120),ylim=c(5,30), border = NA)
+
+# Concentration Weighted Trajectory (CWT)
+trajLevel(traj_hn, pollutant = "pm2.5", statistic = "ctw", col = "increment",
+          orientation=c(90,0,110),xlim=c(95,120),ylim=c(5,30), border = NA)
+
+# Trajectory clustering
+clust <- trajCluster(traj, method = "Angle", n.cluster = 6, 
+                     col = "Set2",orientation=c(90,0,110),xlim=c(95,120),ylim=c(5,30),
+                     map.cols = openColours("Paired", 10))
+
+
