@@ -152,6 +152,8 @@ for (i in 2018:2020) {          ### Change the date in lat = 21.658, lon = 105.8
 
 ###03.   Chuẩn bị dữ liệu
 ###03.1. Dữ liệu từ traj 
+# Hoặc có thể dowload dữ liệu tại:
+https://github.com/tuanvvu/Atmospheric_science_VN/tree/master/Air_quality_data_analysis/data
 traj_hn <- importTraj(site ="Hanoi_120m", year = 2018, local = "E:/NOAA/TrajProc/")
 traj_hn$date <- as.POSIXct(strptime(traj_hn$date, format = "%Y-%m-%d %H:%M:%S", tz = "GMT"))
 traj_hn$date <- with_tz(traj_hn_2018$date,tz = "Asia/Ho_Chi_Minh")
